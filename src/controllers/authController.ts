@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from 'bcrypt'
 import pool from '../config/db'
+import { generateAccessToken } from '../utils/jwt'
 
 export async function register(req: Request, res: Response) {
     try {
@@ -45,7 +46,39 @@ export async function login(req: Request, res: Response) {
         }
 
         const [rows] = await pool.execute(
-            'SELECT id, email, password, role,'
-        )
+            'SELECT id, email, password, role, name FROM users WHERE email = ?', [email]
+        );
+
+        const users = rows as any[];
+        if (users.length === 0) {
+            return res.status(401).json({ message: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+        }
+
+        const user = users[0];
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+        }
+
+        const accessToken = generateAccessToken({
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+        });
+
+        return res.status(200).json({
+        message: '로그인 성공',
+        accessToken,
+        user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            },
+        });
+    }
+    catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: '서버 오류' });
     }
 }
